@@ -1,0 +1,95 @@
+version: '3.7'
+
+services:
+  # Kafka infrastructure - assigned to 'kafka' profile
+  zookeeper:
+    image: confluentinc/cp-zookeeper:latest
+    profiles: ["kafka"]
+    hostname: zookeeper
+    container_name: zookeeper
+    ports:
+      - "2181:2181"
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    networks:
+      - kafka-network
+
+  kafka:
+    image: confluentinc/cp-kafka:latest
+    profiles: ["kafka"]
+    hostname: kafka
+    container_name: kafka
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+      - "9094:9094"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:9094
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_JMX_PORT: 9101
+      KAFKA_JMX_HOSTNAME: localhost
+    networks:
+      - kafka-network
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    profiles: ["kafka"]
+    container_name: kafka-ui
+    ports:
+      - "8080:8080"
+    depends_on:
+      - kafka
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+    networks:
+      - kafka-network
+
+  # CrewAI application - split into two services with different profiles
+  crewai-app-kafka:
+    build: 
+      context: ../crewai
+    profiles: ["kafka"]  # Only in kafka profile
+    env_file:
+      - ../crewai/.env
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
+    depends_on:
+      - kafka
+    volumes:
+      - ../crewai:/app
+    networks:
+      - kafka-network
+    command: python /app/crew.py --kafka
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  crewai-app-direct:
+    build: 
+      context: ../crewai
+    profiles: ["default"]  # Only in default profile
+    env_file:
+      - ../crewai/.env
+    environment:
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
+    volumes:
+      - ../crewai:/app
+    networks:
+      - kafka-network
+    command: python /app/crew.py --no-kafka
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+networks:
+  kafka-network:
+    driver: bridge 

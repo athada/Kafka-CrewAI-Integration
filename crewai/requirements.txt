@@ -1,0 +1,6 @@
+crewai
+langchain>=0.0.267
+requests>=2.25.0
+kafka-python
+python-dotenv
+pydantic
