@@ -17,6 +17,12 @@ KAFKA_RESULT_TOPIC = "debate_topic_result"
 AGENT_MESSAGES_TOPIC = "agent_messages"
 KAFKA_BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", 'localhost:9094')
 
+# Add a new topic for complete conversations
+CONVERSATION_TOPIC = "complete_conversations"
+
+# Add a dedicated topic for real-time agent responses
+AGENT_RESPONSES_TOPIC = "agent_responses"
+
 def create_kafka_producer(max_retries=5, retry_interval=5):
     """Create a Kafka producer with retry logic"""
     for attempt in range(max_retries):
@@ -67,12 +73,36 @@ def create_kafka_consumer(topic=KAFKA_TOPIC, max_retries=5, retry_interval=5):
                 raise RuntimeError(error_msg)
 
 def publish_message(producer, topic, message):
-    """Publish a message to a Kafka topic"""
+    """Publish a message to a Kafka topic with improved error handling"""
     try:
-        producer.send(topic, message)
-        producer.flush()
+        # Ensure message is properly serializable
+        if not isinstance(message, (str, dict)):
+            # If it's a non-standard object, convert to a simpler representation
+            if hasattr(message, '__dict__'):
+                # Extract attributes from the object
+                safe_message = {
+                    "object_type": message.__class__.__name__,
+                    "attributes": {k: str(v) for k, v in message.__dict__.items() if not k.startswith('_')}
+                }
+            else:
+                # If it's not a simple object with __dict__, convert to string
+                safe_message = {
+                    "object_type": type(message).__name__,
+                    "string_representation": str(message)
+                }
+        else:
+            safe_message = message
+        
+        # Add timeout parameters to make sure we don't block forever
+        producer.send(topic, safe_message)
+        
+        # Use a reasonable flush timeout - 5 seconds should be sufficient for most cases
+        producer.flush(timeout=5)
         print(f"Published message to Kafka topic: {topic}")
         return True
+        
     except Exception as e:
         print(f"Error publishing message to {topic}: {e}")
+        # Don't raise the exception - just log it and continue
+        # This prevents Kafka issues from breaking the main application flow
         return False 

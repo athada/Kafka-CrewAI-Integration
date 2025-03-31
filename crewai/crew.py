@@ -12,7 +12,8 @@ from dotenv import load_dotenv
 from agents import create_all_agents
 from tasks import create_all_tasks
 from kafka_utility import create_kafka_producer, create_kafka_consumer, publish_message, KAFKA_TOPIC, AGENT_MESSAGES_TOPIC
-from monitoring import record_agent_message, close_monitor
+from monitoring import record_agent_message, close_monitor, set_kafka_enabled
+from agent_logging import step_callback_handler, task_callback_handler, crew_callback_handler
 
 # Load environment variables
 load_dotenv()
@@ -24,7 +25,7 @@ def parse_arguments():
                         help='Enable Kafka integration (default)')
     parser.add_argument('--no-kafka', dest='use_kafka', action='store_false',
                         help='Disable Kafka integration and run directly')
-    parser.set_defaults(use_kafka=True)
+    parser.set_defaults(use_kafka=False)
     return parser.parse_args()
 
 def run_with_kafka(debate_crew):
@@ -87,7 +88,7 @@ def run_direct(debate_crew):
     """Run the debate directly without Kafka"""
     try:
         # Execute the debate directly
-        print("Starting debate...")
+        print("\n\nStarting debate...")
         print("Running in direct mode (no Kafka)")
         
         # Simple console logging for direct mode
@@ -120,6 +121,11 @@ def run_direct(debate_crew):
 def main():
     """Main application entry point"""
     args = parse_arguments()
+    
+    # Import here to avoid circular imports
+    from monitoring import set_kafka_enabled
+    # Set the Kafka enabled flag in monitoring module
+    set_kafka_enabled(args.use_kafka)
     
     # Create agents and tasks
     agents = create_all_agents()
@@ -158,8 +164,12 @@ def main():
             tasks["anti_closing_task"]   # Anti debater's closing
         ],
         manager_agent=agents["moderator"],
-        process=Process.hierarchical,
-        verbose=True
+        process=Process.sequential,
+        verbose=False,
+        # Add comprehensive callbacks for monitoring
+        step_callback=step_callback_handler,
+        task_callback=task_callback_handler,
+        crew_callback=crew_callback_handler  # Add this new callback
     )
     
     print(f"Starting CrewAI debate {'with' if args.use_kafka else 'without'} Kafka")
