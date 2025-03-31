@@ -1,0 +1,25 @@
+# Task configurations for the debate system
+management_task:
+  description: "Manage the debate on whether autonomous vehicles will bring more benefits than risks to society"
+  expected_output: "A complete debate transcript with a clear winner"
+  agent: "moderator"
+
+pro_opening_task:
+  description: "Present opening argument on the benefits of autonomous vehicles"
+  expected_output: "A persuasive opening statement advocating for autonomous vehicles"
+  agent: "pro_debater"
+
+anti_rebuttal_task:
+  description: "Present rebuttal to pro-autonomous vehicle arguments"
+  expected_output: "A persuasive rebuttal challenging the benefits of autonomous vehicles"
+  agent: "anti_debater"
+
+pro_counter_task:
+  description: "Counter the skeptic's arguments against autonomous vehicles"
+  expected_output: "A persuasive counter-rebuttal defending autonomous vehicles"
+  agent: "pro_debater"
+
+anti_closing_task:
+  description: "Present closing argument on the risks of autonomous vehicles"
+  expected_output: "A persuasive closing statement warning against autonomous vehicles"
+  agent: "anti_debater"

@@ -4,16 +4,15 @@ Main CrewAI application using Ollama integration with Kafka
 
 import os
 import argparse
-import time
-from crewai import Agent, Task, Crew, Process
+import functools
+from crewai import Crew, Process
 from dotenv import load_dotenv
 
 # Import our modular components
-from agents import create_all_agents
-from tasks import create_all_tasks
-from kafka_utility import create_kafka_producer, create_kafka_consumer, publish_message, KAFKA_TOPIC, AGENT_MESSAGES_TOPIC
-from monitoring import record_agent_message, close_monitor, set_kafka_enabled
-from agent_logging import step_callback_handler, task_callback_handler, crew_callback_handler
+from agents import create_agents, create_tasks
+from callbacks import step_callback, get_log_count, set_kafka_enabled
+from kafka_utility import create_kafka_producer, create_kafka_consumer, publish_message, KAFKA_TOPIC, set_kafka_enabled as set_kafka_utility_enabled
+from agent_logging import global_logger
 
 # Load environment variables
 load_dotenv()
@@ -22,7 +21,7 @@ def parse_arguments():
     """Parse command line arguments"""
     parser = argparse.ArgumentParser(description='Run CrewAI with or without Kafka integration')
     parser.add_argument('--kafka', dest='use_kafka', action='store_true', 
-                        help='Enable Kafka integration (default)')
+                        help='Enable Kafka integration')
     parser.add_argument('--no-kafka', dest='use_kafka', action='store_false',
                         help='Disable Kafka integration and run directly')
     parser.set_defaults(use_kafka=False)
@@ -38,25 +37,19 @@ def run_with_kafka(debate_crew):
         topic_data = {"topic": "Will autonomous vehicles bring more benefits than risks to society?"}
         publish_message(producer, KAFKA_TOPIC, topic_data)
         
-        # Also log to the agent messages topic
-        system_message = {
-            "timestamp": time.time(),
-            "agent_role": "system",
-            "message_type": "debate_start",
-            "content": "Starting debate on autonomous vehicles",
-        }
-        publish_message(producer, AGENT_MESSAGES_TOPIC, system_message)
+        # Log system message
+        global_logger.log_system_message("Starting debate on autonomous vehicles", "debate_start")
         
         # Create Kafka consumer
         consumer = create_kafka_consumer()
         
         # Process messages
-        print("Waiting for messages...")
+        global_logger.log_system_message("Waiting for messages...", "info")
         for message in consumer:
-            print(f"Received message: {message.value}")
+            global_logger.log_system_message(f"Received message: {message.value}", "kafka_received")
             
             # Execute the debate
-            print("Starting debate...")
+            global_logger.log_system_message("Starting debate...", "debate_begin")
             crew_output = debate_crew.kickoff()
             
             # Extract the result as string from the CrewOutput object
@@ -67,13 +60,10 @@ def run_with_kafka(debate_crew):
             publish_message(producer, "debate_topic_result", result_data)
             
             # Log completion
-            system_message = {
-                "timestamp": time.time(),
-                "agent_role": "system",
-                "message_type": "debate_complete",
-                "content": f"Debate completed with {len(debate_result) if isinstance(debate_result, str) else 'unknown'} characters",
-            }
-            publish_message(producer, AGENT_MESSAGES_TOPIC, system_message)
+            global_logger.log_system_message(
+                f"Debate completed with {len(debate_result)} characters",
+                "debate_complete"
+            )
             
             # Only process one message
             break
@@ -81,76 +71,60 @@ def run_with_kafka(debate_crew):
         return "Debate completed. Results published to Kafka."
     
     except Exception as e:
-        print(f"Error running with Kafka: {e}")
+        global_logger.log_system_message(f"Error running with Kafka: {e}", "error")
         raise
 
 def run_direct(debate_crew):
     """Run the debate directly without Kafka"""
     try:
         # Execute the debate directly
-        print("\n\nStarting debate...")
-        print("Running in direct mode (no Kafka)")
-        
-        # Simple console logging for direct mode
-        print("\n==== STARTING DEBATE (DIRECT MODE) ====")
-        print(f"Time: {time.strftime('%Y-%m-%d %H:%M:%S')}")
-        print("=======================================\n")
+        global_logger.log_system_message("Starting debate in direct mode (no Kafka)", "debate_begin")
         
         crew_output = debate_crew.kickoff()
         
         # Extract the result as string from the CrewOutput object
         debate_result = str(crew_output)
         
-        print("\n================== DEBATE TRANSCRIPT ==================")
-        print(debate_result)
-        print("=======================================================")
+        global_logger.log_system_message("================== DEBATE TRANSCRIPT ==================", "info")
+        global_logger.log_system_message(debate_result, "debate_transcript")
+        global_logger.log_system_message("=======================================================", "info")
         
         # Log completion to console
-        print("\n==== DEBATE COMPLETE (DIRECT MODE) ====")
-        print(f"Time: {time.strftime('%Y-%m-%d %H:%M:%S')}")
-        print(f"Result type: {type(crew_output).__name__}")
-        print(f"Result length: {len(debate_result) if isinstance(debate_result, str) else 'unknown'} characters")
-        print("========================================\n")
+        global_logger.log_system_message("DEBATE COMPLETE (DIRECT MODE)", "debate_complete")
+        global_logger.log_system_message(
+            f"Result length: {len(debate_result)} characters",
+            "debate_stats"
+        )
         
         return debate_result
     
     except Exception as e:
-        print(f"Error running directly: {e}")
+        global_logger.log_system_message(f"Error running directly: {e}", "error")
         raise
 
 def main():
     """Main application entry point"""
     args = parse_arguments()
     
-    # Import here to avoid circular imports
-    from monitoring import set_kafka_enabled
-    # Set the Kafka enabled flag in monitoring module
+    # Set the Kafka enabled flag
+    set_kafka_utility_enabled(args.use_kafka)
     set_kafka_enabled(args.use_kafka)
     
     # Create agents and tasks
-    agents = create_all_agents()
-    tasks = create_all_tasks(agents)
+    agents = create_agents()
+    tasks = create_tasks(agents)
     
-    print(f"Available task keys: {list(tasks.keys())}")
-    print(f"Available agent keys: {list(agents.keys())}")
+    # Set up callback
+    global_logger.log_system_message(f"Available task keys: {list(tasks.keys())}", "setup")
+    global_logger.log_system_message(f"Available agent keys: {list(agents.keys())}", "setup")
     
-    # Create Kafka monitoring only if using Kafka mode
-    if args.use_kafka:
-        # Create Kafka producer for monitoring
-        producer = create_kafka_producer()
-        
-        # Log application start
-        system_message = {
-            "timestamp": time.time(),
-            "agent_role": "system",
-            "message_type": "application_start",
-            "content": "CrewAI application started with Kafka",
-        }
-        publish_message(producer, AGENT_MESSAGES_TOPIC, system_message)
-    else:
-        print("Starting in direct mode (no Kafka)")
+    # Log application start
+    global_logger.log_system_message(
+        f"CrewAI application started {'with' if args.use_kafka else 'without'} Kafka", 
+        "application_start"
+    )
     
-    # Create the debate crew with hierarchical debate process using actual task names
+    # Create the debate crew
     debate_crew = Crew(
         agents=[
             agents["pro_debater"],
@@ -165,19 +139,20 @@ def main():
         ],
         manager_agent=agents["moderator"],
         process=Process.sequential,
-        verbose=False,
-        # Add comprehensive callbacks for monitoring
-        step_callback=step_callback_handler,
-        task_callback=task_callback_handler,
-        crew_callback=crew_callback_handler  # Add this new callback
+        verbose=True,
+        step_callback=step_callback  # Use our callback to capture all events
     )
     
-    print(f"Starting CrewAI debate {'with' if args.use_kafka else 'without'} Kafka")
+    global_logger.log_system_message(f"Starting CrewAI debate {'with' if args.use_kafka else 'without'} Kafka", "crew_start")
     
     if args.use_kafka:
         result = run_with_kafka(debate_crew)
     else:
         result = run_direct(debate_crew)
+    
+    # Display total log count
+    log_count = get_log_count()
+    global_logger.log_system_message(f"Collected {log_count} callback log entries", "log_stats")
     
     return result
 
