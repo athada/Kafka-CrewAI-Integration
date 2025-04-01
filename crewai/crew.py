@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 
 # Import our modular components
 from agents import create_agents, create_tasks
-from callbacks import step_callback, get_log_count, set_kafka_enabled
+from callbacks import step_callback, get_log_count, set_kafka_enabled, _agent_id_to_role, _agent_role_to_id, _agent_roles
 from kafka_utility import create_kafka_producer, create_kafka_consumer, publish_message, KAFKA_TOPIC, set_kafka_enabled as set_kafka_utility_enabled
 from agent_logging import global_logger
 
@@ -102,6 +102,15 @@ def run_direct(debate_crew):
         global_logger.log_system_message(f"Error running directly: {e}", "error")
         raise
 
+# Initialize agent IDs from config
+def init_agent_ids():
+    """Initialize agent IDs from the configured agents"""
+    for agent_key, agent_role in _agent_roles.items():
+        agent_id = agent_key.lower()
+        _agent_id_to_role[agent_id] = agent_role
+        _agent_role_to_id[agent_role] = agent_id
+        print(f"Registered agent: {agent_id} -> {agent_role}")
+
 def main():
     """Main application entry point"""
     args = parse_arguments()
@@ -123,6 +132,9 @@ def main():
         f"CrewAI application started {'with' if args.use_kafka else 'without'} Kafka", 
         "application_start"
     )
+    
+    # Call this function near the start of your script
+    init_agent_ids()
     
     # Create the debate crew
     debate_crew = Crew(
