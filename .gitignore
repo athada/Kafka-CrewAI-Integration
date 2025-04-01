@@ -6,6 +6,9 @@ __pycache__/
 # C extensions
 *.so
 
+# IOgnore some file
+test.ipynb
+
 # Distribution / packaging
 .Python
 build/

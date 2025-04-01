@@ -142,6 +142,36 @@ def publish_message(producer, topic, message):
         print(f"Error publishing message to {topic}: {e}")
         return False
 
+def publish_to_kafka(topic, message):
+    """Publish a message to a specific Kafka topic immediately"""
+    if not get_kafka_enabled():
+        return False
+        
+    try:
+        producer = get_or_create_producer()
+        if not producer:
+            return False
+        
+        # Publish the message
+        success = publish_message(producer, topic, message)
+        return success
+    except Exception as e:
+        print(f"Error publishing to {topic}: {e}")
+        return False
+
+def close_monitor():
+    """Close the Kafka producer if it exists"""
+    if not get_kafka_enabled():
+        return
+        
+    global _producer
+    if _producer is not None:
+        try:
+            _producer.close()
+            _producer = None
+        except Exception as e:
+            print(f"Error closing Kafka producer: {e}")
+
 def record_agent_message(agent_id, agent_role, message_type, content, context=None):
     """Record an agent message to Kafka"""
     try:
@@ -186,32 +216,7 @@ def record_agent_message(agent_id, agent_role, message_type, content, context=No
         print(f"Error recording agent message: {e}")
         traceback.print_exc()
 
-def publish_to_kafka(topic, message):
-    """Publish a message to a specific Kafka topic immediately"""
-    if not get_kafka_enabled():
-        return False
-        
-    try:
-        producer = get_or_create_producer()
-        if not producer:
-            return False
-            
-        # Publish the message
-        success = publish_message(producer, topic, message)
-        return success
-    except Exception as e:
-        print(f"Error publishing to {topic}: {e}")
-        return False
-
-def close_monitor():
-    """Close the Kafka producer if it exists"""
-    if not get_kafka_enabled():
-        return
-        
-    global _producer
-    if _producer is not None:
-        try:
-            _producer.close()
-            _producer = None
-        except Exception as e:
-            print(f"Error closing Kafka producer: {e}") 
+# Renamed this function to avoid the naming conflict
+def publish_message_simple(message, topic=AGENT_MESSAGES_TOPIC):
+    """Simplified function to publish a message"""
+    publish_to_kafka(topic, message) 
