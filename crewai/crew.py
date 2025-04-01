@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 # Import our modular components
 from agents import create_agents, create_tasks
 from callbacks import step_callback, get_log_count, set_kafka_enabled, _agent_id_to_role, _agent_role_to_id, _agent_roles
-from kafka_utility import create_kafka_producer, create_kafka_consumer, publish_message, KAFKA_TOPIC, set_kafka_enabled as set_kafka_utility_enabled
+from kafka_utility import create_kafka_producer, create_kafka_consumer, publish_message, KAFKA_TOPIC, AGENT_MESSAGES_TOPIC, set_kafka_enabled as set_kafka_utility_enabled
 from agent_logging import global_logger
 
 # Load environment variables

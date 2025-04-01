@@ -24,7 +24,6 @@ KAFKA_TOPIC = "debate_topic"
 KAFKA_RESULT_TOPIC = "debate_topic_result"
 AGENT_MESSAGES_TOPIC = "agent_messages"
 SYSTEM_MESSAGES_TOPIC = "system_messages"
-AGENT_RESPONSES_TOPIC = "agent_responses"
 KAFKA_BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", 'localhost:9094')
 
 # Global variables for monitoring
